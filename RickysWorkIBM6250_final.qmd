@@ -275,3 +275,40 @@ print(adf_test_unemp)
 
 ```
 
+```{r}
+# Install if needed
+# install.packages("forecast")
+
+library(forecast)
+```
+
+
+```{r}
+# Create ts objects for each variable
+cpi_ts <- ts(combined_data$cpi, start = c(min(combined_data$year), 1), frequency = 12)
+unemp_ts <- ts(combined_data$unemployment_rate, start = c(min(combined_data$year), 1), frequency = 12)
+```
+
+
+```{r}
+# Fit separate ARIMA models
+cpi_arima <- auto.arima(na.omit(cpi_ts))
+unemp_arima <- auto.arima(na.omit(unemp_ts))
+
+# Forecast each individually
+cpi_forecast <- forecast(cpi_arima, h = 12)
+unemp_forecast <- forecast(unemp_arima, h = 12)
+```
+
+
+```{r}
+# Plot forecasts
+plot(cpi_forecast, main = "CPI Forecast (Univariate)")
+```
+
+
+```{r}
+plot(unemp_forecast, main = "Unemployment Rate Forecast (Univariate)")
+
+```
+
