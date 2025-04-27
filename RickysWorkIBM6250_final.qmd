@@ -1,0 +1,194 @@
+---
+title: "6250FinalReport"
+format: html
+editor: visual
+---
+
+```{r}
+# ==============================================
+# Full VAR Analysis: CPI & Unemployment Rate
+# ==============================================
+
+# Load necessary libraries
+library(readr)
+library(dplyr)
+library(tidyr)
+library(tseries)
+library(vars)
+```
+
+
+```{r}
+# ==============================================
+# Step 1: Load Data
+# ==============================================
+
+# Load CPI Data
+cpi_data <- read_csv("No Header_ConsumerPriceIndex.csv")
+
+# Load Unemployment Rate Data
+unemp_data <- read_csv("NoHeader_UnemploymentRate.csv")
+```
+
+
+```{r}
+# ==============================================
+# Step 2: Transform Data (Wide to Long)
+# ==============================================
+
+# Pivot CPI
+cpi_long <- cpi_data |>
+  pivot_longer(
+    cols = -Year,
+    names_to = "month",
+    values_to = "cpi"
+  ) |>
+  rename(year = Year)
+
+# Pivot Unemployment
+unemp_long <- unemp_data |>
+  pivot_longer(
+    cols = -Year,
+    names_to = "month",
+    values_to = "unemployment_rate"
+  ) |>
+  rename(year = Year)
+```
+
+
+```{r}
+# ==============================================
+# Step 3: Merge the Datasets
+# ==============================================
+
+# Merge by year and month
+combined_data <- left_join(cpi_long, unemp_long, by = c("year", "month"))
+```
+
+
+```{r}
+# ==============================================
+# Step 4: Create Date Variable
+# ==============================================
+
+combined_data <- combined_data |>
+  mutate(
+    date = as.Date(paste(year, month, "01", sep = "-"), format = "%Y-%B-%d")
+  ) |>
+  arrange(date)
+```
+
+
+```{r}
+# ==============================================
+# Step 5: Remove Any Missing Values
+# ==============================================
+
+combined_data <- combined_data |>
+  filter(!is.na(cpi), !is.na(unemployment_rate))
+```
+
+
+```{r}
+# ==============================================
+# Step 6: Create Multivariate Time Series
+# ==============================================
+
+data_ts <- ts(
+  combined_data[, c("cpi", "unemployment_rate")],
+  start = c(min(combined_data$year), 1),
+  frequency = 12
+)
+```
+
+
+```{r}
+# ==============================================
+# Step 7: Stationarity Test (ADF)
+# ==============================================
+
+# CPI ADF Test
+adf_cpi <- adf.test(data_ts[, "cpi"])
+print(adf_cpi)
+```
+
+
+```{r}
+# Unemployment Rate ADF Test
+adf_unemp <- adf.test(data_ts[, "unemployment_rate"])
+print(adf_unemp)
+```
+
+
+```{r}
+# ==============================================
+# Step 8: Differencing if Necessary
+# ==============================================
+
+# If either series is non-stationary (p-value > 0.05), difference
+diff_data_ts <- diff(data_ts)
+```
+
+
+```{r}
+# ==============================================
+# Step 9: Select Lag Length
+# ==============================================
+
+lag_selection <- VARselect(diff_data_ts, lag.max = 12, type = "const")
+print(lag_selection$criteria)
+```
+
+
+```{r}
+# Choose the best lag (example: 2 lags)
+selected_lag <- 2
+```
+
+
+```{r}
+# ==============================================
+# Step 10: Fit VAR Model
+# ==============================================
+
+var_model <- VAR(diff_data_ts, p = selected_lag, type = "const")
+summary(var_model)
+```
+
+
+```{r}
+# ==============================================
+# Step 11: Impulse Response Functions
+# ==============================================
+
+# Shock: CPI -> Unemployment
+irf_cpi_to_unemp <- irf(var_model, impulse = "cpi", response = "unemployment_rate", boot = TRUE)
+plot(irf_cpi_to_unemp)
+```
+
+
+```{r}
+# Shock: Unemployment -> CPI
+irf_unemp_to_cpi <- irf(var_model, impulse = "unemployment_rate", response = "cpi", boot = TRUE)
+plot(irf_unemp_to_cpi)
+```
+
+
+```{r}
+# ==============================================
+# Step 12: Forecasting
+# ==============================================
+
+forecast_result <- predict(var_model, n.ahead = 12)
+plot(forecast_result)
+```
+
+
+```{r}
+# ==============================================
+# Done!
+# ==============================================
+
+```
+
+
