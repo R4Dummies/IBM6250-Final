@@ -4,6 +4,7 @@ format: html
 editor: visual
 ---
 
+# Impulse Response Function (IRF) plot 
 ```{r}
 # ==============================================
 # Full VAR Analysis: CPI & Unemployment Rate
@@ -145,7 +146,7 @@ print(lag_selection$criteria)
 selected_lag <- 2
 ```
 
-
+# Var Estimation
 ```{r}
 # ==============================================
 # Step 10: Fit VAR Model
@@ -173,7 +174,7 @@ irf_unemp_to_cpi <- irf(var_model, impulse = "unemployment_rate", response = "cp
 plot(irf_unemp_to_cpi)
 ```
 
-
+# Forecast Plot From VAR model 
 ```{r}
 # ==============================================
 # Step 12: Forecasting
@@ -183,12 +184,94 @@ forecast_result <- predict(var_model, n.ahead = 12)
 plot(forecast_result)
 ```
 
-
+# ADF Tests
 ```{r}
-# ==============================================
-# Done!
-# ==============================================
+# Install if needed
+# install.packages(c("tseries", "dplyr", "readr", "tidyr"))
+
+library(tseries)
+library(dplyr)
+library(readr)
+library(tidyr)
 
 ```
 
+```{r}
+# Load CPI data
+cpi_data <- read_csv("No Header_ConsumerPriceIndex.csv")
+
+# Load Unemployment Rate data
+unemp_data <- read_csv("NoHeader_UnemploymentRate.csv")
+```
+
+
+```{r}
+# Pivot CPI
+cpi_long <- cpi_data |>
+  pivot_longer(
+    cols = -Year,
+    names_to = "month",
+    values_to = "cpi"
+  ) |>
+  rename(year = Year)
+```
+
+
+```{r}
+# Pivot Unemployment
+unemp_long <- unemp_data |>
+  pivot_longer(
+    cols = -Year,
+    names_to = "month",
+    values_to = "unemployment_rate"
+  ) |>
+  rename(year = Year)
+```
+
+
+```{r}
+# Merge CPI and Unemployment
+combined_data <- left_join(cpi_long, unemp_long, by = c("year", "month"))
+```
+
+
+```{r}
+# Add a Date column
+combined_data <- combined_data |>
+  mutate(
+    date = as.Date(paste(year, month, "01", sep = "-"), format = "%Y-%B-%d")
+  ) |>
+  arrange(date)
+```
+
+
+```{r}
+# Remove missing values
+combined_data <- combined_data |>
+  filter(!is.na(cpi), !is.na(unemployment_rate))
+
+```
+```{r}
+# Create multivariate ts object
+data_ts <- ts(
+  combined_data[, c("cpi", "unemployment_rate")],
+  start = c(min(combined_data$year), 1),
+  frequency = 12
+)
+
+```
+
+```{r}
+# ADF Test for CPI
+adf_test_cpi <- adf.test(na.omit(data_ts[, "cpi"]))
+print(adf_test_cpi)
+```
+
+
+```{r}
+# ADF Test for Unemployment Rate
+adf_test_unemp <- adf.test(na.omit(data_ts[, "unemployment_rate"]))
+print(adf_test_unemp)
+
+```
 
