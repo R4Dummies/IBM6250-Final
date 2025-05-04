@@ -1,0 +1,143 @@
+---
+title: "Unemployment and CPI relationship"
+author: "Bansi Khachar"
+date: "2025-04-26"
+output: html_document
+---
+
+```{r}
+
+## Load Libraries
+library(readxl)
+library(dplyr)
+
+ConsumerPriceIndex <- ConsumerPriceIndex[, 1:(ncol(ConsumerPriceIndex) - 2)]
+
+# Check the result
+head(ConsumerPriceIndex)
+
+```
+# merging the two data sets of CPI and unmemployement rate
+```{r}
+library(dplyr)
+
+# Merge by Year
+data_merged <- inner_join(UnemploymentRate, ConsumerPriceIndex, by = "Year")
+
+# View merged data
+head(data_merged)
+
+```
+
+
+```{r}
+
+# Create Annual CPI as average of all months
+data_merged <- data_merged %>%
+  mutate(Annual_CPI = rowMeans(select(., Jan.y, Feb.y, Mar.y, Apr.y, May.y, Jun.y, Jul.y, Aug.y, Sep.y, Oct.y, Nov.y, Dec.y), na.rm = TRUE))
+
+# Build one linear regression model
+model_one <- lm(Annual_CPI ~ Jan.x + Feb.x + Mar.x + Apr.x + May.x + Jun.x + Jul.x + Aug.x + Sep.x + Oct.x + Nov.x + Dec.x, data = data_merged)
+                
+# See the model summary
+summary(model_one)
+
+```
+#STL analysis 
+```{r}
+library(tidyverse)
+library(tsibble)
+library(feasts)
+
+cpi_tsibble <- cpi_long %>%
+  mutate(Date = yearmonth(paste(Year, Month))) %>%
+  filter(!is.na(CPI)) %>%  # remove rows where CPI is missing
+  as_tsibble(index = Date)
+
+unemp_tsibble <- unemp_long %>%
+  mutate(Date = yearmonth(paste(Year, Month))) %>%
+  filter(!is.na(Unemployment)) %>%  # remove missing unemployment values
+  as_tsibble(index = Date)
+
+
+# --- 1. CPI DATA PREPARATION ---
+
+cpi_long <- ConsumerPriceIndex %>%
+  pivot_longer(cols = Jan:Dec, names_to = "Month", values_to = "CPI") %>%
+  mutate(Month = match(Month, month.abb)) %>%
+  arrange(Year, Month)
+
+cpi_tsibble <- cpi_long %>%
+  mutate(Date = yearmonth(paste(Year, Month))) %>%
+  as_tsibble(index = Date)
+
+# --- 2. UNEMPLOYMENT DATA PREPARATION ---
+
+unemp_long <- UnemploymentRate %>%
+  pivot_longer(cols = Jan:Dec, names_to = "Month", values_to = "Unemployment") %>%
+  mutate(Month = match(Month, month.abb)) %>%
+  arrange(Year, Month)
+
+unemp_tsibble <- unemp_long %>%
+  mutate(Date = yearmonth(paste(Year, Month))) %>%
+  as_tsibble(index = Date)
+
+# --- 3. STL DECOMPOSITION ---
+
+# For CPI
+cpi_stl <- cpi_tsibble %>%
+  model(STL(CPI))
+
+# For Unemployment
+unemp_stl <- unemp_tsibble %>%
+  model(STL(Unemployment))
+
+# --- 4. PLOT THE RESULTS ---
+cpi_stl <- cpi_tsibble %>%
+  model(STL(CPI))
+
+unemp_stl <- unemp_tsibble %>%
+  model(STL(Unemployment))
+
+cpi_stl %>% components() %>% autoplot()
+unemp_stl %>% components() %>% autoplot()
+
+```
+
+```{r}
+library(tidyverse)
+library(tsibble)
+library(feasts)
+
+# --- 1. Extract STL Components ---
+
+cpi_comp <- components(cpi_stl) %>%
+  as_tibble() %>%
+  select(Date, CPI_trend = trend, CPI_season = season_year, CPI_remainder = remainder)
+
+unemp_comp <- components(unemp_stl) %>%
+  as_tibble() %>%
+  select(Date, Unemp_trend = trend, Unemp_season = season_year, Unemp_remainder = remainder)
+
+# --- 2. Merge components together ---
+
+comparison_data <- left_join(cpi_comp, unemp_comp, by = "Date")
+
+# --- 3. Reshape for easier plotting ---
+
+comparison_long <- comparison_data %>%
+  pivot_longer(cols = -Date, names_to = c("Variable", "Component"), names_sep = "_", values_to = "Value")
+
+# --- 4. Plot Both CPI and Unemployment STL Together ---
+
+ggplot(comparison_long, aes(x = Date, y = Value, color = Variable)) +
+  geom_line() +
+  facet_wrap(~Component, scales = "free_y", ncol = 1) +
+  labs(title = "STL Decomposition Comparison: CPI vs Unemployment",
+       x = "Date",
+       y = "Value",
+       color = "Variable") +
+  theme_minimal()
+
+```
+
